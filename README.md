@@ -1,169 +1,246 @@
-# Gmail AI Job Agent — Full System Specification
+# 🚀 Gmail AI Job Agent (FULL PRODUCTION SPEC)
+
+---
 
 ## 🧠 Overview
 
-Build a production-ready Node.js automation system that:
+This project builds a fully automated AI system that:
 
-* Reads unread Gmail emails
-* Uses OpenAI (ChatGPT) to classify job-related emails
-* Takes actions:
+* Reads Gmail inbox
+* Uses ChatGPT to **understand email content**
+* Decides what to do:
 
-  * Reply to remote jobs with resume
-  * Reply to hybrid/on-site jobs with polite decline
-  * Delete job alert emails
-  * Ignore recruiter replies
+  * Reply (remote job)
+  * Reply (hybrid job)
+  * Delete (job alerts)
+  * Ignore (recruiter replies)
+* Generates **custom AI replies per email**
 * Attaches resume from Google Drive
-* Runs automatically via GitHub Actions every 5 minutes
-* Avoids duplicate processing via Gmail labels
+* Runs automatically via GitHub Actions
+
+---
+
+## 🏗 Architecture
+
+```
+Gmail → Node.js → OpenAI (ChatGPT)
+                   ↓
+           classify + generate reply
+                   ↓
+          Gmail API → reply/delete
+                   ↓
+        Google Drive → attach resume
+                   ↓
+           GitHub Actions (scheduler)
+```
 
 ---
 
 ## ⚙️ Tech Stack
 
 * Node.js (ESM)
-* Gmail API (googleapis)
+* Gmail API
 * Google Drive API
-* OpenAI API
+* OpenAI API (ChatGPT)
 * GitHub Actions
 * dotenv
 
 ---
 
-## 🔐 Environment Variables
+## 🔐 Google Cloud Setup
 
-Create `.env`:
+### Step 1: Create Project
+
+Go to Google Cloud Console
+
+---
+
+### Step 2: Enable APIs
+
+* Gmail API
+* Google Drive API
+
+---
+
+### Step 3: Create OAuth Credentials
+
+Type: **Desktop App**
+
+Download:
 
 ```
-OPENAI_API_KEY=
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REFRESH_TOKEN=
+credentials.json
 ```
 
 ---
 
-## 📁 Folder Responsibilities
+### Step 4: Generate Refresh Token
 
-### src/index.js
+Run script locally to get:
 
-* Entry point
-* Calls processor
+```
+refresh_token
+client_id
+client_secret
+```
 
-### src/gmail.js
-
-* Fetch unread emails
-* Send replies
-* Apply labels
-* Delete emails
-
-### src/drive.js
-
-* Fetch resume from Google Drive
-
-### src/openai.js
-
-* classifyEmail()
-* generateReply()
-
-### src/processor.js
-
-* Orchestrates full logic
-* Decision engine
+👉 Required for production automation ([Google for Developers][1])
 
 ---
 
-## 🧠 AI Logic
+## 🔐 GitHub Secrets Setup
+
+Go to:
+
+Settings → Secrets → Actions
+
+Add:
+
+```
+OPENAI_API_KEY
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REFRESH_TOKEN
+```
+
+👉 GitHub Actions uses secrets as env variables ([paulie.dev][2])
+
+---
+
+## 📁 Project Structure
+
+```
+src/
+ ├── index.js
+ ├── gmail.js
+ ├── drive.js
+ ├── openai.js
+ ├── processor.js
+
+utils/
+ ├── logger.js
+
+.github/workflows/
+ └── automation.yml
+```
+
+---
+
+## 🧠 AI Logic (CRITICAL)
 
 ### classifyEmail()
 
 Input:
 
-* email subject + body
+* subject + body
 
-Output JSON:
+Output:
 
-```
+```json
 {
   "action": "reply_remote | reply_hybrid | delete | ignore"
 }
 ```
 
-Rules:
-
-* Remote → reply_remote
-* Hybrid/on-site → reply_hybrid
-* Job alerts → delete
-* Replies → ignore
-
 ---
 
 ### generateReply()
 
+⚡ IMPORTANT:
+
+ChatGPT MUST generate dynamic reply based on email content.
+
+---
+
+### Prompt (VERY IMPORTANT)
+
+```
+You are Mohamed Moheyeldin, a Senior QA Automation Engineer.
+
+Read the email and write a professional reply.
+
 Rules:
 
-* Remote:
+IF remote job:
+- Show strong interest
+- Mention QA automation, Cypress, Playwright, CI/CD
+- Keep concise
 
-  * Express strong interest
-  * Mention QA automation experience
-* Hybrid:
+IF hybrid/on-site:
+- Politely decline
+- Say you are focusing on remote roles
 
-  * Politely decline
-  * Prefer remote roles
-* Keep concise
+Tone:
+- Professional
+- Confident
+- Concise
+
+DO NOT:
+- Be generic
+- Repeat same template
+- Sound robotic
+```
 
 ---
 
 ## 📧 Gmail Processing Rules
 
-### Fetch emails:
+### Fetch Emails
 
-* is:unread
-* exclude label: processed_by_ai
-
----
-
-### Actions:
-
-#### reply_remote
-
-* Generate AI reply
-* Attach resume
-* Send email
-
-#### reply_hybrid
-
-* Generate AI reply
-* Attach resume
-* Send email
-
-#### delete
-
-* Move to trash
-
-#### ignore
-
-* Do nothing
+```
+is:unread -label:processed_by_ai
+```
 
 ---
 
-### After processing:
+### Filtering Logic
 
-* Add label: `processed_by_ai`
-* Mark email as read
+#### 🚫 Delete
+
+* "job alert"
+* "recommended jobs"
+* "today's jobs"
+* LinkedIn alerts
+
+---
+
+#### 📩 Reply (Remote)
+
+If AI detects remote job:
+
+* Generate reply using ChatGPT
+* Attach resume
+* Send email
+
+---
+
+#### ⚠️ Reply (Hybrid)
+
+* Generate polite decline
+* Attach resume
+
+---
+
+#### 📌 Ignore
+
+* Emails with "Re:"
+* Ongoing conversations
+* Recruiter replies
 
 ---
 
 ## 📎 Resume Handling
 
 * Fetch from Google Drive
-* File name contains: "Resume"
-* Attach as base64
+* File contains: "Resume"
+* Convert to base64
+* Attach to Gmail reply
 
 ---
 
 ## 🏷 Labels
 
-Create Gmail label manually:
+Create manually in Gmail:
 
 ```
 processed_by_ai
@@ -171,25 +248,44 @@ processed_by_ai
 
 ---
 
-## ⚠️ Safety Rules
+## 🔁 Post Processing
 
-* Do NOT reply to:
+After each email:
 
-  * noreply emails
-  * linkedin alerts
-  * automated senders
-* Skip emails with "Re:" in subject
-* Limit to 10 emails per run
+* Mark as read
+* Add label `processed_by_ai`
+
+---
+
+## ⚠️ Safety Rules (VERY IMPORTANT)
+
+DO NOT reply if:
+
+* sender contains "noreply"
+* subject starts with "Re:"
+* email looks automated
+
+Limit:
+
+```
+max 10 emails per run
+```
 
 ---
 
 ## ⚙️ GitHub Actions
 
-Create:
-
-`.github/workflows/automation.yml`
+File:
 
 ```
+.github/workflows/automation.yml
+```
+
+---
+
+### Workflow
+
+```yaml
 name: Gmail AI Job Agent
 
 on:
@@ -222,30 +318,34 @@ jobs:
 
 ## 🧪 Testing Plan
 
-### Test Cases:
+Send test emails:
 
-1. Remote job email
-2. Hybrid job email
-3. Job alert email
-4. Recruiter reply
+1. "Remote QA job"
+2. "Hybrid role"
+3. "Job alert"
+4. "Re: Follow up"
+
+---
 
 Validate:
 
 * Correct classification
-* Correct action
+* Correct reply
 * Resume attached
-* Label applied
+* Alerts deleted
 
 ---
 
-## 🔄 Future Enhancements
+## 🧠 Advanced Enhancements
 
-* Store processed emails in JSON/DB
-* Track recruiter conversations
-* Extract company + role
-* Multi-resume support
-* Slack notifications
-* UI dashboard
+* Store processed emails in JSON
+* Track recruiter history
+* Avoid duplicate replies
+* Extract:
+
+  * company
+  * salary
+  * job title
 
 ---
 
@@ -253,22 +353,27 @@ Validate:
 
 A fully autonomous AI agent that:
 
-* Filters inbox
+* Cleans inbox
 * Applies intelligently
 * Saves time
-* Increases job response efficiency
+* Maximizes job opportunities
 
 ---
 
 ## 🔥 Instructions for Codex
 
-* Generate modular, clean code
-* Use async/await
-* Handle errors gracefully
-* Add logging
-* Keep code production-ready
-* Use ES modules (import/export)
+When using this file:
+
+1. Generate all files in modular structure
+2. Use async/await
+3. Add logging
+4. Handle API failures
+5. Ensure Gmail + OpenAI integration works
+6. Use production-ready code
 
 ---
 
 END OF SPEC
+
+[1]: https://developers.google.com/identity/protocols/oauth2?utm_source=chatgpt.com "Using OAuth 2.0 to Access Google APIs | Authorization"
+[2]: https://paulie.dev/posts/2025/02/how-to-send-email-using-github-actions/?utm_source=chatgpt.com "How to Send email using Gmail and GitHub Actions"
